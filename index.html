@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>会員証</title>
+
+<!-- LIFF SDK -->
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<!-- バーコード生成ライブラリ(CODE128) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: #f2f3f5;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: linear-gradient(135deg, #06c755 0%, #04a548 100%);
+    border-radius: 16px;
+    padding: 24px;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  }
+  .card-header {
+    font-size: 14px;
+    opacity: 0.85;
+    margin-bottom: 4px;
+  }
+  .member-name {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .points-block {
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .points-label { font-size: 12px; opacity: 0.85; }
+  .points-value { font-size: 32px; font-weight: 700; margin-top: 4px; }
+  .points-value span { font-size: 16px; font-weight: 400; margin-left: 4px; }
+
+  .member-no-label { font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
+  .member-no-value { font-size: 16px; letter-spacing: 2px; margin-bottom: 12px; }
+
+  .barcode-wrap {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 8px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .state-message {
+    color: #333;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <p class="state-message">会員証を読み込んでいます...</p>
+</div>
+
+<script>
+// ==========================================================
+// 設定値: 実際の値に置き換えてください
+// ==========================================================
+const LIFF_ID = "YOUR_LIFF_ID";              // LINE Developersで発行されたLIFF ID
+const API_BASE_URL = "https://your-api-domain.example.com"; // server/index.js をデプロイしたURL
+
+async function main() {
+  await liff.init({ liffId: LIFF_ID });
+
+  if (!liff.isLoggedIn()) {
+    liff.login();
+    return;
+  }
+
+  const profile = await liff.getProfile();
+  const lineUserId = profile.userId;
+  const displayName = profile.displayName;
+
+  // 会員情報を取得。未登録なら自動登録。
+  let member = await fetchMember(lineUserId);
+  if (!member) {
+    member = await registerMember(lineUserId, displayName);
+  }
+
+  renderCard(member);
+}
+
+async function fetchMember(lineUserId) {
+  const res = await fetch(`${API_BASE_URL}/member/${lineUserId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("会員情報の取得に失敗しました");
+  return res.json();
+}
+
+async function registerMember(lineUserId, name) {
+  const res = await fetch(`${API_BASE_URL}/member/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lineUserId, name }),
+  });
+  if (!res.ok) throw new Error("会員登録に失敗しました");
+  return res.json();
+}
+
+function renderCard(member) {
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <div class="card">
+      <div class="card-header">会員証</div>
+      <div class="member-name">${escapeHtml(member.name)} 様</div>
+
+      <div class="points-block">
+        <div class="points-label">保有ポイント</div>
+        <div class="points-value">${member.points.toLocaleString()}<span>pt</span></div>
+      </div>
+
+      <div class="member-no-label">会員番号</div>
+      <div class="member-no-value">${member.member_no}</div>
+
+      <div class="barcode-wrap">
+        <svg id="barcode"></svg>
+      </div>
+    </div>
+  `;
+
+  JsBarcode("#barcode", member.member_no, {
+    format: "CODE128",
+    width: 2,
+    height: 60,
+    displayValue: false,
+    margin: 0,
+  });
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[m]));
+}
+
+main().catch((err) => {
+  console.error(err);
+  document.getElementById("app").innerHTML =
+    `<p class="state-message">読み込みに失敗しました。時間を置いて再度お試しください。</p>`;
+});
+</script>
+
+</body>
+</html>
